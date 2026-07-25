@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{input::mouse::MouseMotion, prelude::*};
 
 pub struct CameraPlugin;
 
@@ -16,23 +16,23 @@ impl Camera {
 
     fn walk(
         time: Res<Time>,
-        input: Res<ButtonInput<KeyCode>>,
+        keyboard: Res<ButtonInput<KeyCode>>,
         mut camera: Single<&mut Transform, With<Camera>>,
     ) {
         let delta_time = time.delta_secs();
         let move_speed = 10.0;
         let mut direction = Vec3::ZERO;
 
-        if input.pressed(KeyCode::KeyW) {
+        if keyboard.pressed(KeyCode::KeyW) {
             direction += *camera.forward();
         }
-        if input.pressed(KeyCode::KeyA) {
+        if keyboard.pressed(KeyCode::KeyA) {
             direction += *camera.left();
         }
-        if input.pressed(KeyCode::KeyS) {
+        if keyboard.pressed(KeyCode::KeyS) {
             direction += *camera.back();
         }
-        if input.pressed(KeyCode::KeyD) {
+        if keyboard.pressed(KeyCode::KeyD) {
             direction += *camera.right();
         }
 
@@ -41,11 +41,36 @@ impl Camera {
             camera.translation += direction * move_speed * delta_time;
         }
     }
+
+    fn rotate(
+        time: Res<Time>,
+        mut mouse: MessageReader<MouseMotion>,
+        mut camera: Single<&mut Transform, With<Camera>>,
+    ) {
+        let delta_time = time.delta_secs();
+        let sensitivity = Vec2::new(0.08, 0.08);
+
+        for motion in mouse.read() {
+            // Add yaw which is turning left/right
+            let delta_yaw = -motion.delta.x * delta_time * sensitivity.x;
+            camera.rotate_y(delta_yaw);
+
+            // Add pitch which is looking up/down
+            let delta_pitch = -motion.delta.y * delta_time * sensitivity.y;
+            const PITCH_LIMIT: f32 = std::f32::consts::FRAC_PI_2 - 0.01;
+            let (yaw, pitch, roll) = camera.rotation.to_euler(EulerRot::YXZ);
+
+            // Apply the rotation
+            let pitch = (pitch + delta_pitch).clamp(-PITCH_LIMIT, PITCH_LIMIT);
+            camera.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll);
+        }
+    }
 }
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, Camera::spawn);
         app.add_systems(Update, Camera::walk);
+        app.add_systems(Update, Camera::rotate);
     }
 }
