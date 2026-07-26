@@ -49,6 +49,8 @@ impl Camera {
         mut mouse: MessageReader<MouseMotion>,
         mut camera: Single<&mut Transform, With<Camera>>,
     ) {
+        // TODO: Also look into picking
+        // See https://taintedcoders.com/bevy/picking
         let delta_time = time.delta_secs();
         let sensitivity = Vec2::new(0.08, 0.08);
 
