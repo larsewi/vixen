@@ -54,16 +54,14 @@ impl Player {
     }
 
     fn yaw(
-        time: Res<Time>,
         mut mouse: MessageReader<MouseMotion>,
         mut player: Single<&mut Transform, With<Player>>,
     ) {
-        let delta_time = time.delta_secs();
-        let sensitivity = 0.08;
+        let sensitivity = 0.005;
 
         for motion in mouse.read() {
             // Add yaw which is turning left/right. Pitch is handled by the camera.
-            let delta_yaw = -motion.delta.x * delta_time * sensitivity;
+            let delta_yaw = -motion.delta.x * sensitivity;
             player.rotate_y(delta_yaw);
         }
     }

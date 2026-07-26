@@ -8,18 +8,16 @@ pub struct Camera;
 
 impl Camera {
     fn pitch(
-        time: Res<Time>,
         mut mouse: MessageReader<MouseMotion>,
         mut camera: Single<&mut Transform, With<Camera>>,
     ) {
         // TODO: Also look into picking
         // See https://taintedcoders.com/bevy/picking
-        let delta_time = time.delta_secs();
-        let sensitivity = 0.08;
+        let sensitivity = 0.005;
 
         for motion in mouse.read() {
             // Add pitch which is looking up/down. Yaw is handled by the player.
-            let delta_pitch = -motion.delta.y * delta_time * sensitivity;
+            let delta_pitch = -motion.delta.y * sensitivity;
             const PITCH_LIMIT: f32 = std::f32::consts::FRAC_PI_2 - 0.01;
             let (yaw, pitch, roll) = camera.rotation.to_euler(EulerRot::YXZ);
 
