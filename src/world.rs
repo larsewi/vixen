@@ -70,8 +70,11 @@ fn spawn_world(
             sample_world(&map, origin_x + x, y, origin_z + z)
         });
 
-        // A fully empty chunk (no faces) yields no collider; skip it.
-        let Some(collider) = Collider::trimesh_from_mesh(&mesh) else {
+        // A fully empty chunk (no faces) yields no collider; skip it. FIX_INTERNAL_EDGES
+        // stops the player catching on the seams between the many small triangles that
+        // tile a flat surface (trimesh "ghost collisions"), which otherwise cause jitter.
+        let flags = TrimeshFlags::MERGE_DUPLICATE_VERTICES | TrimeshFlags::FIX_INTERNAL_EDGES;
+        let Some(collider) = Collider::trimesh_from_mesh_with_config(&mesh, flags) else {
             continue;
         };
 
