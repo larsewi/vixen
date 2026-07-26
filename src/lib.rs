@@ -3,10 +3,12 @@ use bevy::prelude::*;
 mod camera;
 mod cube;
 mod light;
+mod player;
 
 use camera::CameraPlugin;
 use cube::Cube;
 use light::LightPlugin;
+use player::PlayerPlugin;
 
 pub struct GamePlugin;
 
@@ -28,7 +30,7 @@ pub fn close_on_escape(
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((CameraPlugin, LightPlugin))
+        app.add_plugins((PlayerPlugin, CameraPlugin, LightPlugin))
             .add_systems(Startup, Cube::spawn)
             .add_systems(Update, close_on_escape);
     }
