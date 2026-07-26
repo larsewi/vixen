@@ -1,7 +1,9 @@
 use avian3d::prelude::*;
 use bevy::{ecs::query::Has, input::mouse::MouseMotion, prelude::*};
 
+use crate::block::BLOCK_SIZE;
 use crate::camera::Camera;
+use crate::chunk::WORLD_HEIGHT;
 
 pub struct PlayerPlugin;
 
@@ -32,14 +34,14 @@ pub struct MaxSlopeAngle(f32);
 
 impl Player {
     pub fn spawn(mut commands: Commands) {
-        // Local height of the camera above the capsule's center. The capsule rests
-        // with its center ~0.9 above the cube's top face, so this puts the eyes near
-        // the top of the body (~1.7 above the ground the player stands on).
+        // Local height of the camera above the body's center. The body is ~1.8 tall,
+        // so an offset of 0.8 puts the eyes near the top of the body.
         const EYE_OFFSET: f32 = 0.8;
 
-        // Slim capsule (radius 0.3, cylinder length 1.2 => ~1.8 total) so it fits the
-        // 1×1 top of the cube.
-        let collider = Collider::capsule(0.3, 1.2);
+        // A cylinder (radius 0.3, height 1.8) rather than a capsule: its flat bottom
+        // rests flush on a block's top face, so the player doesn't slide off the
+        // rounded edge of a capsule when standing on sloped/stepped terrain.
+        let collider = Collider::cylinder(0.3, 1.8);
 
         // Ground detection: a slightly smaller copy of the collider cast straight down.
         let mut caster_shape = collider.clone();
@@ -48,10 +50,11 @@ impl Player {
         commands
             .spawn((
                 Player,
-                // Spawn above the cube so the player drops and settles on top of it,
-                // facing horizontally. Only yaw lives on the body; pitch is applied to
-                // the camera.
-                Transform::from_xyz(0.0, 2.5, 0.0).looking_to(Vec3::NEG_Z, Vec3::Y),
+                // Spawn high above the world centre so the player drops and settles on
+                // top of the generated terrain, facing horizontally. Only yaw lives on
+                // the body; pitch is applied to the camera.
+                Transform::from_xyz(0.0, WORLD_HEIGHT as f32 * BLOCK_SIZE + 2.0, 0.0)
+                    .looking_to(Vec3::NEG_Z, Vec3::Y),
                 // The player has no mesh of its own, but the camera child inherits
                 // visibility, so the parent needs the visibility components too —
                 // otherwise Bevy warns about an inconsistent hierarchy (B0004).

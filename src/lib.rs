@@ -1,15 +1,19 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+mod block;
 mod camera;
-mod cube;
+mod chunk;
 mod light;
+mod mesher;
 mod player;
+mod terrain;
+mod world;
 
 use camera::CameraPlugin;
-use cube::Cube;
 use light::LightPlugin;
 use player::PlayerPlugin;
+use world::WorldPlugin;
 
 pub struct GamePlugin;
 
@@ -39,8 +43,8 @@ impl Plugin for GamePlugin {
             PlayerPlugin,
             CameraPlugin,
             LightPlugin,
+            WorldPlugin,
         ))
-        .add_systems(Startup, Cube::spawn)
         .add_systems(Update, close_on_escape);
     }
 }
