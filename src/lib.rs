@@ -1,3 +1,4 @@
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
 mod camera;
@@ -30,8 +31,16 @@ pub fn close_on_escape(
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((PlayerPlugin, CameraPlugin, LightPlugin))
-            .add_systems(Startup, Cube::spawn)
-            .add_systems(Update, close_on_escape);
+        app.add_plugins((
+            // Avian steps physics in `FixedPostUpdate` at a fixed timestep. Rendering
+            // is smoothed by interpolation, opted into per-entity with a
+            // `TranslationInterpolation` component (see `Player::spawn`).
+            PhysicsPlugins::default(),
+            PlayerPlugin,
+            CameraPlugin,
+            LightPlugin,
+        ))
+        .add_systems(Startup, Cube::spawn)
+        .add_systems(Update, close_on_escape);
     }
 }
