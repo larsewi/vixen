@@ -19,6 +19,8 @@ impl Camera {
         keyboard: Res<ButtonInput<KeyCode>>,
         mut camera: Single<&mut Transform, With<Camera>>,
     ) {
+        // TODO: Consider bevy_enhanced_input if we run into frame issues
+        // See https://taintedcoders.com/bevy/input
         let delta_time = time.delta_secs();
         let move_speed = 10.0;
         let mut direction = Vec3::ZERO;
