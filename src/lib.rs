@@ -3,6 +3,7 @@ use bevy::prelude::*;
 
 mod block;
 mod camera;
+mod character;
 mod chunk;
 mod light;
 mod mesher;
@@ -11,6 +12,7 @@ mod terrain;
 mod world;
 
 use camera::CameraPlugin;
+use character::CharacterControllerPlugin;
 use light::LightPlugin;
 use player::PlayerPlugin;
 use world::WorldPlugin;
@@ -40,6 +42,7 @@ impl Plugin for GamePlugin {
             // is smoothed by interpolation, opted into per-entity with a
             // `TranslationInterpolation` component (see `Player::spawn`).
             PhysicsPlugins::default(),
+            CharacterControllerPlugin,
             PlayerPlugin,
             CameraPlugin,
             LightPlugin,

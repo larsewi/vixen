@@ -13,7 +13,7 @@ impl Camera {
     ) {
         // TODO: Also look into picking
         // See https://taintedcoders.com/bevy/picking
-        let sensitivity = 0.003;
+        let sensitivity = 0.001;
 
         for motion in mouse.read() {
             // Add pitch which is looking up/down. Yaw is handled by the player.

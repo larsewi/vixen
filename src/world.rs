@@ -66,9 +66,7 @@ fn spawn_world(
         // look them up in the world map (this transparently reaches into neighbours).
         let origin_x = coord.x * CHUNK_SIZE as i32;
         let origin_z = coord.y * CHUNK_SIZE as i32;
-        let mesh = mesher::build_mesh(|x, y, z| {
-            sample_world(&map, origin_x + x, y, origin_z + z)
-        });
+        let mesh = mesher::build_mesh(|x, y, z| sample_world(&map, origin_x + x, y, origin_z + z));
 
         // A fully empty chunk (no faces) yields no collider; skip it. FIX_INTERNAL_EDGES
         // stops the player catching on the seams between the many small triangles that
@@ -82,7 +80,11 @@ fn spawn_world(
             Chunk,
             Mesh3d(meshes.add(mesh)),
             MeshMaterial3d(material.clone()),
-            Transform::from_xyz(origin_x as f32 * BLOCK_SIZE, 0.0, origin_z as f32 * BLOCK_SIZE),
+            Transform::from_xyz(
+                origin_x as f32 * BLOCK_SIZE,
+                0.0,
+                origin_z as f32 * BLOCK_SIZE,
+            ),
             RigidBody::Static,
             collider,
         ));

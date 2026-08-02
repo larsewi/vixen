@@ -1,8 +1,11 @@
 use avian3d::prelude::*;
-use bevy::{ecs::query::Has, input::mouse::MouseMotion, prelude::*};
+use bevy::{input::mouse::MouseMotion, prelude::*};
 
 use crate::block::BLOCK_SIZE;
 use crate::camera::Camera;
+use crate::character::{
+    CharacterController, CharacterMovementSettings, GroundDetection, MovementAction,
+};
 use crate::chunk::WORLD_HEIGHT;
 
 pub struct PlayerPlugin;
@@ -10,70 +13,43 @@ pub struct PlayerPlugin;
 #[derive(Component)]
 pub struct Player;
 
-/// Marker present while the player is standing on the ground (the cube).
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub struct Grounded;
-
-/// Target horizontal speed while moving on the ground, in m/s.
-#[derive(Component)]
-pub struct MovementSpeed(f32);
-
-/// Acceleration available for steering while airborne, in m/s². Lower than instant
-/// ground control, so a jump keeps most of its momentum but can still be nudged.
-#[derive(Component)]
-pub struct AirAcceleration(f32);
-
-/// Upward velocity applied on jump.
-#[derive(Component)]
-pub struct JumpImpulse(f32);
-
-/// Steepest ground the player can stand on and jump from, in radians.
-#[derive(Component)]
-pub struct MaxSlopeAngle(f32);
-
 impl Player {
     pub fn spawn(mut commands: Commands) {
         // Local height of the camera above the body's center. The body is ~1.8 tall,
         // so an offset of 0.8 puts the eyes near the top of the body.
         const EYE_OFFSET: f32 = 0.8;
 
-        // A cylinder (radius 0.3, height 1.8) rather than a capsule: its flat bottom
-        // rests flush on a block's top face, so the player doesn't slide off the
-        // rounded edge of a capsule when standing on sloped/stepped terrain.
-        let collider = Collider::cylinder(0.3, 1.8);
-
-        // Ground detection: a slightly smaller copy of the collider cast straight down.
-        let mut caster_shape = collider.clone();
-        caster_shape.set_scale(Vec3::ONE * 0.99, 10);
-
         commands
             .spawn((
                 Player,
-                // Spawn high above the world centre so the player drops and settles on
+                // Spawn high above the world center so the player drops and settles on
                 // top of the generated terrain, facing horizontally. Only yaw lives on
                 // the body; pitch is applied to the camera.
                 Transform::from_xyz(0.0, WORLD_HEIGHT as f32 * BLOCK_SIZE + 2.0, 0.0)
                     .looking_to(Vec3::NEG_Z, Vec3::Y),
                 // The player has no mesh of its own, but the camera child inherits
-                // visibility, so the parent needs the visibility components too —
+                // visibility, so the parent needs the visibility components too;
                 // otherwise Bevy warns about an inconsistent hierarchy (B0004).
                 Visibility::default(),
-                RigidBody::Dynamic,
-                collider,
-                // Keep the capsule upright but leave yaw free so we can turn it.
-                LockedAxes::new().lock_rotation_x().lock_rotation_z(),
-                ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::default(), Dir3::NEG_Y)
-                    .with_max_distance(0.2),
-                MovementSpeed(3.0),
-                AirAcceleration(10.0),
-                JumpImpulse(5.0),
-                MaxSlopeAngle(std::f32::consts::PI * 0.45),
-                // Don't stick to or bounce off surfaces we brush against.
-                Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
-                Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
+                // Moved by the kinematic character controller in `character.rs` rather
+                // than by the physics solver, so the player never gets shoved around by
+                // contacts and stays exactly where we put it.
+                CharacterController,
+                // A cylinder (radius 0.3, height 1.8) rather than a capsule: its flat
+                // bottom rests flush on a block's top face, so the player doesn't slide
+                // off the rounded edge of a capsule when standing on stepped terrain.
+                Collider::cylinder(0.3, 1.8),
+                // Ground detection casts a slightly slimmer copy of the body downwards,
+                // so hugging a wall doesn't register as standing on it.
+                GroundDetection::new(Collider::cylinder(0.29, 1.8)),
+                CharacterMovementSettings {
+                    // Tops out at acceleration / damping, so a little over 3 m/s.
+                    acceleration: 40.0,
+                    damping: 12.0,
+                    ..default()
+                },
                 // Smooth the rendered position between fixed physics steps. Only
-                // translation — yaw is driven manually and should stay instant.
+                // translation - yaw is driven manually and should stay instant.
                 TranslationInterpolation,
             ))
             // Mount the camera on the player's head. It inherits the body's yaw;
@@ -81,110 +57,40 @@ impl Player {
             .with_child((Camera, Transform::from_xyz(0.0, EYE_OFFSET, 0.0)));
     }
 
-    fn yaw(
-        mut mouse: MessageReader<MouseMotion>,
-        player: Single<(&mut Rotation, &mut AngularVelocity), With<Player>>,
-    ) {
-        let sensitivity = 0.003;
-        let (mut rotation, mut angular_velocity) = player.into_inner();
+    fn yaw(mut mouse: MessageReader<MouseMotion>, player: Single<&mut Rotation, With<Player>>) {
+        let sensitivity = 0.001;
+        let mut rotation = player.into_inner();
 
         for motion in mouse.read() {
             // Add yaw which is turning left/right. Pitch is handled by the camera.
             // We write the physics `Rotation` (its source of truth) rather than the
-            // `Transform`, so the solver doesn't overwrite it.
+            // `Transform`, so the physics writeback doesn't overwrite it.
             let delta_yaw = -motion.delta.x * sensitivity;
             rotation.0 = Quat::from_rotation_y(delta_yaw) * rotation.0;
         }
-
-        // Yaw is driven manually, so cancel any spin the solver picked up from
-        // brushing against geometry.
-        angular_velocity.0 = Vec3::ZERO;
     }
 
-    /// Toggles the [`Grounded`] marker based on the downward ground caster.
-    fn update_grounded(
-        mut commands: Commands,
-        player: Single<(Entity, &ShapeHits, &Rotation, &MaxSlopeAngle), With<Player>>,
-    ) {
-        let (entity, hits, rotation, max_slope_angle) = player.into_inner();
-
-        // Grounded if the caster hit a surface whose normal isn't too steep.
-        let is_grounded = hits
-            .iter()
-            .any(|hit| (rotation * -hit.normal2).angle_between(Vec3::Y).abs() <= max_slope_angle.0);
-
-        if is_grounded {
-            commands.entity(entity).insert(Grounded);
-        } else {
-            commands.entity(entity).remove::<Grounded>();
-        }
-    }
-
-    fn movement(
-        time: Res<Time>,
+    /// Turns keyboard input into [`MovementAction`]s for the character controller.
+    fn input(
         keyboard: Res<ButtonInput<KeyCode>>,
-        player: Single<
-            (
-                &MovementSpeed,
-                &AirAcceleration,
-                &JumpImpulse,
-                &Rotation,
-                &mut LinearVelocity,
-                Has<Grounded>,
-            ),
-            With<Player>,
-        >,
+        mut actions: MessageWriter<MovementAction>,
+        rotation: Single<&Rotation, With<Player>>,
     ) {
-        let (speed, air_acceleration, jump_impulse, rotation, mut linear_velocity, is_grounded) =
-            player.into_inner();
+        let forward = keyboard.pressed(KeyCode::KeyW) as i8 - keyboard.pressed(KeyCode::KeyS) as i8;
+        let right = keyboard.pressed(KeyCode::KeyD) as i8 - keyboard.pressed(KeyCode::KeyA) as i8;
 
-        // Build a horizontal input direction (local space, -Z is forward).
-        let mut direction = Vec3::ZERO;
-        if keyboard.pressed(KeyCode::KeyW) {
-            direction.z -= 1.0;
-        }
-        if keyboard.pressed(KeyCode::KeyS) {
-            direction.z += 1.0;
-        }
-        if keyboard.pressed(KeyCode::KeyA) {
-            direction.x -= 1.0;
-        }
-        if keyboard.pressed(KeyCode::KeyD) {
-            direction.x += 1.0;
+        // Input direction in local space, where -Z is forward.
+        let local = Vec3::new(right as f32, 0.0, -forward as f32);
+
+        if local != Vec3::ZERO {
+            // Rotate by the body's yaw so movement is relative to where the player
+            // faces. The body only ever yaws, so this stays horizontal.
+            let world = rotation.0 * local.normalize();
+            actions.write(MovementAction::Move(Vec2::new(world.x, world.z)));
         }
 
-        // World-space move direction, rotated by the body's yaw so it's relative to
-        // where the player faces.
-        let world_dir = if direction != Vec3::ZERO {
-            rotation.0 * direction.normalize()
-        } else {
-            Vec3::ZERO
-        };
-
-        if is_grounded {
-            // Snap horizontal velocity straight to the target so movement starts and
-            // stops instantly — the crisp, responsive feel of an FPS.
-            let target = world_dir * speed.0;
-            linear_velocity.x = target.x;
-            linear_velocity.z = target.z;
-        } else if world_dir != Vec3::ZERO {
-            // Airborne: nudge horizontal velocity toward the input with limited
-            // authority, so you can steer the jump. Momentum is otherwise preserved
-            // (no ground snap), and steering can't push us past the ground speed.
-            let delta = world_dir * air_acceleration.0 * time.delta_secs();
-            linear_velocity.x += delta.x;
-            linear_velocity.z += delta.z;
-
-            let horizontal = Vec2::new(linear_velocity.x, linear_velocity.z);
-            if horizontal.length() > speed.0 {
-                let clamped = horizontal.normalize() * speed.0;
-                linear_velocity.x = clamped.x;
-                linear_velocity.z = clamped.y;
-            }
-        }
-
-        if is_grounded && keyboard.just_pressed(KeyCode::Space) {
-            linear_velocity.y = jump_impulse.0;
+        if keyboard.just_pressed(KeyCode::Space) {
+            actions.write(MovementAction::Jump);
         }
     }
 }
@@ -192,9 +98,9 @@ impl Player {
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, Player::spawn);
-        app.add_systems(
-            Update,
-            (Player::yaw, Player::update_grounded, Player::movement).chain(),
-        );
+        // Collect input in `PreUpdate` so it is queued before the fixed timestep runs
+        // and the character controller consumes it.
+        app.add_systems(PreUpdate, Player::input);
+        app.add_systems(Update, Player::yaw);
     }
 }
